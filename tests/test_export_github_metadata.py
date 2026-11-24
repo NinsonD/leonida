@@ -26,7 +26,7 @@ class ExportTests(unittest.TestCase):
         calls = []
         def fake_fetch(url, token=None):
             calls.append(url)
-            return list(range(100)) if "page=1" in url else [101]
+            return list(range(100)) if url.endswith("&page=1") else [101]
         with patch.object(exporter, "fetch_json", side_effect=fake_fetch):
             self.assertEqual(len(list(exporter.pages("/repos/example/project/issues"))), 101)
         self.assertEqual(len(calls), 2)
