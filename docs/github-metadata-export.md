@@ -13,8 +13,8 @@ Python 3.9+; standard library only:
 python scripts/export_github_metadata.py ubiquitarianism/leonida --output metadata.json
 ```
 
-Optional: set `GITHUB_TOKEN` to a token with access to public metadata for higher API rate limits.
-The script never prints the token. Do not commit tokens or exported private data.
+Requests are unauthenticated, including when `GITHUB_TOKEN` is set, so private repositories
+cannot be exported. GitHub's lower unauthenticated rate limit applies.
 
 Offline tests (mocked API; no network calls):
 

@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -14,7 +15,7 @@ spec.loader.exec_module(exporter)
 
 def record(number, *, pull=False):
     result = {"id": number + 100, "number": number, "title": f"Item {number}",
-              "html_url": f"https://github.com/example/project/issues/{number}",
+              "html_url": f"https://github.com/example/project/issues/{number}", "body": "original description",
               "user": {"login": "contributor"}, "state": "open"}
     if pull:
         result["pull_request"] = {"url": "https://api.github.com/example"}
@@ -46,9 +47,13 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(result["counts"], {"issues": 1, "pull_requests": 1, "comments": 1, "reviews": 1})
         self.assertEqual(result["issues"][0]["comments"][0]["author"], "alice")
         self.assertEqual(result["pull_requests"][0]["reviews"][0]["author"], "bob")
+        self.assertEqual(result["issues"][0]["body"], "original description")
+        self.assertEqual(result["pull_requests"][0]["body"], "original description")
 
     def test_duplicate_ids_fail_closed(self):
-        with patch.object(exporter, "pages", return_value=iter([record(1), record(1)])):
+        def fake_pages(endpoint, token=None):
+            return iter([record(1), record(1)]) if endpoint.endswith("/issues?state=all") else iter([])
+        with patch.object(exporter, "pages", side_effect=fake_pages):
             with self.assertRaisesRegex(ValueError, "Duplicate"):
                 exporter.export("example/project")
 
@@ -61,6 +66,18 @@ class ExportTests(unittest.TestCase):
         with patch.object(exporter, "fetch_json", return_value={"message": "unexpected"}):
             with self.assertRaisesRegex(ValueError, "Expected list"):
                 list(exporter.pages("/repos/example/project/issues"))
+
+    def test_cli_ignores_token_and_writes_lf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "output.json"
+            data = {"counts": {}, "body": "example"}
+            with patch.object(sys, "argv", ["export", "example/project", "--output", str(target)]), \
+                 patch.dict("os.environ", {"GITHUB_TOKEN": "private-token"}), \
+                 patch.object(exporter, "export", return_value=data) as export:
+                self.assertEqual(exporter.main(), 0)
+            export.assert_called_once_with("example/project")
+            self.assertEqual(json.loads(target.read_bytes()), data)
+            self.assertNotIn(b"\r\n", target.read_bytes())
 
 
 if __name__ == "__main__":

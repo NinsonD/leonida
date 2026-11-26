@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 API = "https://api.github.com"
-FIELDS = ("id", "number", "html_url", "state", "title", "created_at", "updated_at", "closed_at")
+FIELDS = ("id", "number", "html_url", "state", "title", "body", "created_at", "updated_at", "closed_at")
 COMMENT_FIELDS = ("id", "html_url", "created_at", "updated_at", "body")
 REVIEW_FIELDS = ("id", "html_url", "state", "submitted_at", "body")
 
@@ -98,13 +98,16 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
-        data = export(args.repository, os.environ.get("GITHUB_TOKEN"))
+        # Unauthenticated requests prevent exporting a private repository using a
+        # token inherited from the environment.
+        data = export(args.repository)
         # Atomic replacement: API errors never leave a partial output presented as complete.
         target = args.output
         target.parent.mkdir(parents=True, exist_ok=True)
         temp = target.with_name(target.name + ".tmp")
         try:
-            temp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            with temp.open("w", encoding="utf-8", newline="\n") as stream:
+                stream.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
             temp.replace(target)
         finally:
             temp.unlink(missing_ok=True)
